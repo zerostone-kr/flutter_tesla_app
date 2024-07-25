@@ -31,11 +31,11 @@ class MyHomePage extends StatefulWidget {
 class _MyHomePageState extends State<MyHomePage> {
   String accessToken = '';
   HttpServer? _server;
-  final int _port = 8323;  // 로컬 서버 포트
+  final int _port = 8080;  // 로컬 서버 포트
 
   final String clientId = '2110d263-ec90-42b5-9fd9-e1064d93a976';
   final String clientSecret = 'ta-secret.GUwR%lb%N7UnHTeb';
-  final String redirectUri = 'http://localhost:8323/callback';  // 로컬 서버 리디렉션 URI
+  final String redirectUri = 'http://localhost:8080/callback';  // 로컬 서버 리디렉션 URI
   // final String redirectUri = 'https://auth.tesla.com/void/callback';  // 로컬 서버 리디렉션 URI
 
   @override
@@ -51,19 +51,24 @@ class _MyHomePageState extends State<MyHomePage> {
   }
 
   Future<void> _startLocalServer() async {
-    _server = await HttpServer.bind(InternetAddress.loopbackIPv4, _port);
-    _server?.listen((HttpRequest request) {
-      if (request.uri.path == '/callback') {
-        final code = request.uri.queryParameters['code'];
-        if (code != null) {
-          _fetchAccessToken(code);
+    try {
+      _server = await HttpServer.bind(InternetAddress.loopbackIPv4, _port);
+      print('Local server started on port: $_port');
+      _server?.listen((HttpRequest request) {
+        if (request.uri.path == '/callback') {
+          final code = request.uri.queryParameters['code'];
+          if (code != null) {
+            _fetchAccessToken(code);
+          }
+          request.response
+            ..statusCode = HttpStatus.ok
+            ..write('Authentication successful. You can close this tab.')
+            ..close();
         }
-        request.response
-          ..statusCode = HttpStatus.ok
-          ..write('Authentication successful. You can close this tab.')
-          ..close();
-      }
-    });
+      });
+    } catch (e) {
+      print('Failed to start local server: $e');
+    }
   }
 
   @override
