@@ -79,7 +79,7 @@ class _MyHomePageState extends State<MyHomePage> {
         title: const Text('Tesla API Demo'),
       ),
       body: WebView(
-        initialUrl: 'https://auth.tesla.com/oauth2/v3/authorize?response_type=code&client_id=$clientId&redirect_uri=$redirectUri&scope=oopenid%20offline_access%20user_data vehicle_device_data vehicle_cmds vehicle_charging_cmds',
+        initialUrl: 'https://auth.tesla.com/oauth2/v3/authorize?response_type=code&client_id=$clientId&redirect_uri=$redirectUri&scope=	openid offline_access user_data vehicle_device_data vehicle_cmds vehicle_charging_cmds&code_challenge=bFoI-q1X6yH2-kBGEZ3gkv3JNd527d7ZWIw-KmIFm6I',
         javascriptMode: JavascriptMode.unrestricted,
         onWebViewCreated: (WebViewController webViewController) {
           _controller = webViewController;
