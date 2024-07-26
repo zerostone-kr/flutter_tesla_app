@@ -53,7 +53,7 @@ class _MyHomePageState extends State<MyHomePage> {
   Future<void> _startLocalServer() async {
     try {
       _server = await HttpServer.bind(InternetAddress.loopbackIPv4, _port);
-      print('Local server started on port: $_port');
+      print('[zerostone] Local server started on port: $_port');
       _server?.listen((HttpRequest request) {
         if (request.uri.path == '/callback') {
           final code = request.uri.queryParameters['code'];
@@ -67,19 +67,19 @@ class _MyHomePageState extends State<MyHomePage> {
         }
       });
     } catch (e) {
-      print('Failed to start local server: $e');
+      print('[zerostone] Failed to start local server: $e');
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    print('[zerostone] Build () start...');
     return Scaffold(
       appBar: AppBar(
         title: const Text('Tesla API Demo'),
       ),
       body: WebView(
-        initialUrl: 'https://auth.tesla.com/oauth2/v3/authorize?response_type=code&client_id=$clientId&redirect_uri=$redirectUri&scope=oopenid offline_access user_data vehicle_device_data vehicle_cmds vehicle_charging_cmds',
-        // initialUrl: 'http://localhost:8111/callback',
+        initialUrl: 'https://auth.tesla.com/oauth2/v3/authorize?response_type=code&client_id=$clientId&redirect_uri=$redirectUri&scope=oopenid%20offline_access%20user_data vehicle_device_data vehicle_cmds vehicle_charging_cmds',
         javascriptMode: JavascriptMode.unrestricted,
         onWebViewCreated: (WebViewController webViewController) {
           _controller = webViewController;
