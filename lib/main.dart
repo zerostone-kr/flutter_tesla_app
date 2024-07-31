@@ -28,7 +28,7 @@ class MyHomePage extends StatefulWidget {
   _MyHomePageState createState() => _MyHomePageState();
 }
 
-class _MyHomePageState extends State<MyHomePage> {
+class _MyHomePageState extends State<MyHomePage> with WidgetsBindingObserver {
   String accessToken = '';
   HttpServer? _server;
   final int _port = 8080;  // 로컬 서버 포트
@@ -41,20 +41,41 @@ class _MyHomePageState extends State<MyHomePage> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _startLocalServer();
   }
 
   @override
   void dispose() {
-    _server?.close();
+    WidgetsBinding.instance.removeObserver(this);
+    _closeLocalServer();
     super.dispose();
+  }
+
+  void _closeLocalServer() {
+    if (_server != null) {
+      _server!.close(force: true).then((_) {
+        print('[zerostone] Local server closed');
+      }).catchError((error) {
+        print('[zerostone] Error closing server: $error');
+      });
+    }
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.detached) {
+      _closeLocalServer();
+    }
   }
 
   Future<void> _startLocalServer() async {
     try {
-      _server = await HttpServer.bind(InternetAddress.loopbackIPv4, _port);
+      _server = await HttpServer.bind(InternetAddress.loopbackIPv4, _port, shared: true);
       print('[zerostone] Local server started on port: $_port');
       _server?.listen((HttpRequest request) {
+        
+        print('[zerostone] uri : ${request.uri.query}');
         if (request.uri.path == '/callback') {
           final code = request.uri.queryParameters['code'];
           if (code != null) {
@@ -69,23 +90,6 @@ class _MyHomePageState extends State<MyHomePage> {
     } catch (e) {
       print('[zerostone] Failed to start local server: $e');
     }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    print('[zerostone] Build () start...');
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Tesla API Demo'),
-      ),
-      body: WebView(
-        initialUrl: 'https://auth.tesla.com/oauth2/v3/authorize?response_type=code&client_id=$clientId&redirect_uri=$redirectUri&scope=	openid offline_access user_data vehicle_device_data vehicle_cmds vehicle_charging_cmds&code_challenge=bFoI-q1X6yH2-kBGEZ3gkv3JNd527d7ZWIw-KmIFm6I',
-        javascriptMode: JavascriptMode.unrestricted,
-        onWebViewCreated: (WebViewController webViewController) {
-          _controller = webViewController;
-        },
-      ),
-    );
   }
 
   Future<void> _fetchAccessToken(String code) async {
@@ -127,4 +131,46 @@ class _MyHomePageState extends State<MyHomePage> {
     final vehicleData = json.decode(response.body);
     print(vehicleData);
   }
+
+  @override
+  Widget build(BuildContext context) {
+    print('[zerostone] Build () start...');
+    return FutureBuilder<void>(
+      future: _startLocalServer(),
+      builder: (BuildContext context, AsyncSnapshot<void> snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return Scaffold(
+            appBar: AppBar(
+              title: Text('Tesla API Demo'),
+            ),
+            body: Center(
+              child: CircularProgressIndicator(),
+            ),
+          );
+        } else if (snapshot.hasError) {
+          return Scaffold(
+            appBar: AppBar(
+              title: Text('Tesla API Demo'),
+            ),
+            body: Center(
+              child: Text('Failed to start local server: ${snapshot.error}'),
+            ),
+          );
+        } else {
+          return Scaffold(
+            appBar: AppBar(
+              title: Text('Tesla API Demo'),
+            ),
+            body: WebView(
+              initialUrl: 'https://auth.tesla.com/oauth2/v3/authorize?response_type=code&client_id=$clientId&redirect_uri=$redirectUri&scope=openid email offline_access',
+              javascriptMode: JavascriptMode.unrestricted,
+              onWebViewCreated: (WebViewController webViewController) {
+                _controller = webViewController;
+              },
+            ),
+          );
+        }
+      },
+    );
+  }  
 }
