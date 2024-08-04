@@ -33,6 +33,7 @@ dependencies:
   http: ^0.13.3
   # http: ^1.0.0
   webview_flutter: ^2.0.13
+  shared_preferences: ^2.0.6  
   # flutter_local_notifications: ^8.0.0
   
 
