@@ -1,28 +1,38 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 
-void main() {
+void main() async {
+  await dotenv.load(fileName: ".env");
   runApp(MyApp());
 }
 
 class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
+    final String clientId = dotenv.env['CLIENT_ID'] ?? '';
+    final String clientSecret = dotenv.env['CLIENT_SECRET'] ?? '';
+
     return MaterialApp(
       title: 'Tesla API Demo',
       theme: ThemeData(
         primarySwatch: Colors.blue,
       ),
-      home: MyHomePage(),
+      home: MyHomePage(clientId: clientId, clientSecret: clientSecret),
     );
   }
 }
 
 class MyHomePage extends StatefulWidget {
+  final String clientId;
+  final String clientSecret;
+
+  MyHomePage({required this.clientId, required this.clientSecret});
+
   @override
   _MyHomePageState createState() => _MyHomePageState();
 }
@@ -34,11 +44,8 @@ class _MyHomePageState extends State<MyHomePage> with WidgetsBindingObserver {
   final int _port = 8080;  // 포트 8080 사용
   bool _isFetchingToken = false;  // 중복 실행 방지
 
-  // 제공된 clientId 및 clientSecret
-  final String clientId = '2110d263-ec90-42b5-9fd9-e1064d93a976';
-  final String clientSecret = 'ta-secret.GUwR%lb%N7UnHTeb';
   final String redirectUri = 'http://localhost:8080/callback';  // 리디렉션 URI
-  final String scope = 'openid email offline_access';
+  final String scope = 'openid offline_access user_data vehicle_device_data vehicle_cmds vehicle_charging_cmds';
 
   @override
   void initState() {
@@ -107,8 +114,8 @@ class _MyHomePageState extends State<MyHomePage> with WidgetsBindingObserver {
       },
       body: {
         'grant_type': 'authorization_code',
-        'client_id': clientId,
-        'client_secret': clientSecret,
+        'client_id': widget.clientId,
+        'client_secret': widget.clientSecret,
         'code': code,
         'redirect_uri': redirectUri,
         'scope': scope,  // Scope 추가
@@ -229,7 +236,7 @@ class _MyHomePageState extends State<MyHomePage> with WidgetsBindingObserver {
                     children: [
                       Expanded(
                         child: WebView(
-                          initialUrl: 'https://auth.tesla.com/oauth2/v3/authorize?response_type=code&client_id=$clientId&redirect_uri=$redirectUri&scope=$scope',
+                          initialUrl: 'https://auth.tesla.com/oauth2/v3/authorize?response_type=code&client_id=${widget.clientId}&redirect_uri=$redirectUri&scope=$scope',
                           javascriptMode: JavascriptMode.unrestricted,
                           onWebViewCreated: (WebViewController webViewController) {
                             _controller = webViewController;
