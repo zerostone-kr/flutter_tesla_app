@@ -32,11 +32,13 @@ class _MyHomePageState extends State<MyHomePage> with WidgetsBindingObserver {
   String accessToken = '';
   HttpServer? _server;
   final int _port = 8080;  // 포트 8080 사용
+  bool _isFetchingToken = false;  // 중복 실행 방지
 
   // 제공된 clientId 및 clientSecret
   final String clientId = '2110d263-ec90-42b5-9fd9-e1064d93a976';
   final String clientSecret = 'ta-secret.GUwR%lb%N7UnHTeb';
   final String redirectUri = 'http://localhost:8080/callback';  // 리디렉션 URI
+  final String scope = 'openid email offline_access';
 
   @override
   void initState() {
@@ -55,10 +57,11 @@ class _MyHomePageState extends State<MyHomePage> with WidgetsBindingObserver {
   void _closeLocalServer() {
     if (_server != null) {
       _server!.close(force: true).then((_) {
-        print('Local server closed');
+        print('[zerostone] Local server closed');
       }).catchError((error) {
-        print('Error closing server: $error');
+        print('[zerostone] Error closing server: $error');
       });
+      _server = null;
     }
   }
 
@@ -70,10 +73,12 @@ class _MyHomePageState extends State<MyHomePage> with WidgetsBindingObserver {
   }
 
   Future<void> _startLocalServer() async {
+    if (_server != null) {
+      return;
+    }
     try {
-      _server?.close(force: true);  // 기존 서버가 있다면 먼저 종료
-      _server = await HttpServer.bind(InternetAddress.loopbackIPv4, _port, shared: true);
-      print('Local server started on port: $_port');
+      _server = await HttpServer.bind(InternetAddress.anyIPv4, _port, shared: true);
+      print('[zerostone] Local server started on port: $_port');
       _server?.listen((HttpRequest request) {
         if (request.uri.path == '/callback') {
           final code = request.uri.queryParameters['code'];
@@ -87,11 +92,14 @@ class _MyHomePageState extends State<MyHomePage> with WidgetsBindingObserver {
         }
       });
     } catch (e) {
-      print('Failed to start local server: $e');
+      print('[zerostone] Failed to start local server: $e');
     }
   }
 
   Future<void> _fetchAccessToken(String code) async {
+    if (_isFetchingToken) return;
+    _isFetchingToken = true;
+
     final response = await http.post(
       Uri.parse('https://auth.tesla.com/oauth2/v3/token'),
       headers: {
@@ -103,6 +111,7 @@ class _MyHomePageState extends State<MyHomePage> with WidgetsBindingObserver {
         'client_secret': clientSecret,
         'code': code,
         'redirect_uri': redirectUri,
+        'scope': scope,  // Scope 추가
       },
     );
 
@@ -111,18 +120,21 @@ class _MyHomePageState extends State<MyHomePage> with WidgetsBindingObserver {
       setState(() {
         accessToken = responseData['access_token'];
       });
+      print('[zerostone] Token fetched successfully: $accessToken');  // 토큰 발행 로그 추가
       _saveAccessToken(accessToken);
       _closeLocalServer();  // 로컬 서버 종료
       _getVehicleData();
     } else {
-      print('Failed to fetch access token: ${response.statusCode}');
-      print('Response body: ${response.body}');
+      print('[zerostone] Failed to fetch access token: ${response.statusCode}');
+      print('[zerostone] Response body: ${response.body}');
     }
+
+    _isFetchingToken = false;
   }
 
   Future<void> _getVehicleData() async {
     if (accessToken.isEmpty) {
-      print('Access token is empty');
+      print('[zerostone] Access token is empty');
       return;
     }
 
@@ -135,13 +147,14 @@ class _MyHomePageState extends State<MyHomePage> with WidgetsBindingObserver {
 
     if (response.statusCode == 200) {
       final vehicleData = json.decode(response.body);
-      print(vehicleData);
+      print('[zerostone] $vehicleData');
     } else {
-      print('Failed to fetch vehicle data: ${response.statusCode}');
-      print('Response body: ${response.body}');
+      print('[zerostone] Failed to fetch vehicle data: ${response.statusCode}');
+      print('[zerostone] Response body: ${response.body}');
       if (response.statusCode == 401) {
-        print('Invalid bearer token');
-        _clearAccessToken();
+        print('[zerostone] Invalid bearer token');
+        await _clearAccessToken();
+        _startLocalServer();  // 로컬 서버 다시 시작
       }
     }
   }
@@ -159,6 +172,8 @@ class _MyHomePageState extends State<MyHomePage> with WidgetsBindingObserver {
 
     if (accessToken.isNotEmpty) {
       _getVehicleData();
+    } else {
+      _startLocalServer();
     }
   }
 
@@ -168,6 +183,7 @@ class _MyHomePageState extends State<MyHomePage> with WidgetsBindingObserver {
     setState(() {
       accessToken = '';
     });
+    await Future.delayed(Duration(seconds: 1)); // 딜레이 추가
     _startLocalServer();
   }
 
@@ -213,7 +229,7 @@ class _MyHomePageState extends State<MyHomePage> with WidgetsBindingObserver {
                     children: [
                       Expanded(
                         child: WebView(
-                          initialUrl: 'https://auth.tesla.com/oauth2/v3/authorize?response_type=code&client_id=$clientId&redirect_uri=$redirectUri&scope=openid email offline_access',
+                          initialUrl: 'https://auth.tesla.com/oauth2/v3/authorize?response_type=code&client_id=$clientId&redirect_uri=$redirectUri&scope=$scope',
                           javascriptMode: JavascriptMode.unrestricted,
                           onWebViewCreated: (WebViewController webViewController) {
                             _controller = webViewController;
