@@ -1,22 +1,30 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:flutter_dotenv/flutter_dotenv.dart';
-import 'package:webview_flutter/webview_flutter.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:webview_flutter/webview_flutter.dart';
 
-void main() async {
-  await dotenv.load(fileName: ".env");
-  runApp(MyApp());
+
+void main() {
+
+  const String clientId = String.fromEnvironment('CLIENT_ID');
+  const String clientSecret = String.fromEnvironment('CLIENT_SECRET');
+
+  print('CLIENT_ID : $clientId');
+  print('CLIENT_SECRET : $clientSecret');
+
+  runApp(MyApp(clientId: clientId, clientSecret: clientSecret));
 }
 
 class MyApp extends StatelessWidget {
+  final String clientId;
+  final String clientSecret;
+
+  MyApp({required this.clientId, required this.clientSecret});
+
   @override
   Widget build(BuildContext context) {
-    final String clientId = dotenv.env['CLIENT_ID'] ?? '';
-    final String clientSecret = dotenv.env['CLIENT_SECRET'] ?? '';
-
     return MaterialApp(
       title: 'Tesla API Demo',
       theme: ThemeData(
@@ -37,55 +45,30 @@ class MyHomePage extends StatefulWidget {
   _MyHomePageState createState() => _MyHomePageState();
 }
 
-class _MyHomePageState extends State<MyHomePage> with WidgetsBindingObserver {
-  WebViewController? _controller;
+class _MyHomePageState extends State<MyHomePage> {
   String accessToken = '';
-  HttpServer? _server;
-  final int _port = 8080;  // 포트 8080 사용
-  bool _isFetchingToken = false;  // 중복 실행 방지
-
-  final String redirectUri = 'http://localhost:8080/callback';  // 리디렉션 URI
+  HttpServer? _server; // HttpServer 객체 선언
+  final String redirectUri = 'http://localhost:8080/callback';
   final String scope = 'openid offline_access user_data vehicle_device_data vehicle_cmds vehicle_charging_cmds';
 
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addObserver(this);
-    _loadAccessToken();
+    _startLocalServer(); // 로컬 서버 시작
+    _loadAccessToken(); // 저장된 액세스 토큰 로드
   }
 
   @override
   void dispose() {
-    WidgetsBinding.instance.removeObserver(this);
-    _closeLocalServer();
+    _closeLocalServer(); // 리소스 해제
     super.dispose();
   }
 
-  void _closeLocalServer() {
-    if (_server != null) {
-      _server!.close(force: true).then((_) {
-        print('[zerostone] Local server closed');
-      }).catchError((error) {
-        print('[zerostone] Error closing server: $error');
-      });
-      _server = null;
-    }
-  }
-
-  @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.detached) {
-      _closeLocalServer();
-    }
-  }
-
   Future<void> _startLocalServer() async {
-    if (_server != null) {
-      return;
-    }
     try {
-      _server = await HttpServer.bind(InternetAddress.anyIPv4, _port, shared: true);
-      print('[zerostone] Local server started on port: $_port');
+      _server = await HttpServer.bind(InternetAddress.anyIPv4, 8080, shared: true);
+      print('[zerostone] Local server started on port: 8080');
+      
       _server?.listen((HttpRequest request) {
         if (request.uri.path == '/callback') {
           final code = request.uri.queryParameters['code'];
@@ -103,10 +86,15 @@ class _MyHomePageState extends State<MyHomePage> with WidgetsBindingObserver {
     }
   }
 
-  Future<void> _fetchAccessToken(String code) async {
-    if (_isFetchingToken) return;
-    _isFetchingToken = true;
+  void _closeLocalServer() {
+    _server?.close(force: true).then((_) {
+      print('[zerostone] Local server closed');
+    }).catchError((error) {
+      print('[zerostone] Error closing server: $error');
+    });
+  }
 
+  Future<void> _fetchAccessToken(String code) async {
     final response = await http.post(
       Uri.parse('https://auth.tesla.com/oauth2/v3/token'),
       headers: {
@@ -118,7 +106,7 @@ class _MyHomePageState extends State<MyHomePage> with WidgetsBindingObserver {
         'client_secret': widget.clientSecret,
         'code': code,
         'redirect_uri': redirectUri,
-        'scope': scope,  // Scope 추가
+        'scope': scope,
       },
     );
 
@@ -127,42 +115,11 @@ class _MyHomePageState extends State<MyHomePage> with WidgetsBindingObserver {
       setState(() {
         accessToken = responseData['access_token'];
       });
-      print('[zerostone] Token fetched successfully: $accessToken');  // 토큰 발행 로그 추가
+      print('[zerostone] Token fetched successfully: $accessToken');
       _saveAccessToken(accessToken);
-      _closeLocalServer();  // 로컬 서버 종료
-      _getVehicleData();
     } else {
       print('[zerostone] Failed to fetch access token: ${response.statusCode}');
       print('[zerostone] Response body: ${response.body}');
-    }
-
-    _isFetchingToken = false;
-  }
-
-  Future<void> _getVehicleData() async {
-    if (accessToken.isEmpty) {
-      print('[zerostone] Access token is empty');
-      return;
-    }
-
-    final response = await http.get(
-      Uri.parse('https://owner-api.teslamotors.com/api/1/vehicles'),
-      headers: {
-        'Authorization': 'Bearer $accessToken',
-      },
-    );
-
-    if (response.statusCode == 200) {
-      final vehicleData = json.decode(response.body);
-      print('[zerostone] $vehicleData');
-    } else {
-      print('[zerostone] Failed to fetch vehicle data: ${response.statusCode}');
-      print('[zerostone] Response body: ${response.body}');
-      if (response.statusCode == 401) {
-        print('[zerostone] Invalid bearer token');
-        await _clearAccessToken();
-        _startLocalServer();  // 로컬 서버 다시 시작
-      }
     }
   }
 
@@ -176,11 +133,10 @@ class _MyHomePageState extends State<MyHomePage> with WidgetsBindingObserver {
     setState(() {
       accessToken = prefs.getString('access_token') ?? '';
     });
-
-    if (accessToken.isNotEmpty) {
-      _getVehicleData();
+    if (accessToken.isEmpty) {
+      _startAuthentication();
     } else {
-      _startLocalServer();
+      print('[zerostone] Access token loaded: $accessToken');
     }
   }
 
@@ -190,9 +146,29 @@ class _MyHomePageState extends State<MyHomePage> with WidgetsBindingObserver {
     setState(() {
       accessToken = '';
     });
-    await Future.delayed(Duration(seconds: 1)); // 딜레이 추가
-    _startLocalServer();
   }
+
+  void _startAuthentication() {
+    // 만약 accessToken이 없으면, 인증 URL로 이동
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => Scaffold(
+          appBar: AppBar(title: Text('Authenticate')),
+          body: WebView(
+            initialUrl: 'https://auth.tesla.com/oauth2/v3/authorize'
+                '?response_type=code&client_id=${widget.clientId}'
+                '&redirect_uri=$redirectUri&scope=$scope',
+            javascriptMode: JavascriptMode.unrestricted,
+            onPageStarted: (url) {
+              print('[zerostone] Loading URL: $url');
+            },
+          ),
+        ),
+      ),
+    );
+  }
+
 
   @override
   Widget build(BuildContext context) {
@@ -201,8 +177,10 @@ class _MyHomePageState extends State<MyHomePage> with WidgetsBindingObserver {
         title: Text('Tesla API Demo'),
         actions: [
           IconButton(
-            icon: Icon(Icons.refresh),
-            onPressed: _clearAccessToken,
+            icon: Icon(Icons.directions_car),
+            onPressed: () {
+              print('[zerostone] 자동차 정보 버튼 클릭됨');
+            },
           ),
         ],
       ),
@@ -213,9 +191,22 @@ class _MyHomePageState extends State<MyHomePage> with WidgetsBindingObserver {
                 Center(child: Text('토큰이 존재합니다: $accessToken')),
                 Padding(
                   padding: const EdgeInsets.all(8.0),
-                  child: ElevatedButton(
-                    onPressed: _clearAccessToken,
-                    child: Text('신규토큰발행'),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      ElevatedButton(
+                        onPressed: _clearAccessToken,
+                        child: Text('신규토큰발행'),
+                      ),
+                      SizedBox(width: 10),
+                      ElevatedButton(
+                        onPressed: () {
+                          _clearAccessToken();
+                          print('[zerostone] 저장된 토큰 삭제됨');
+                        },
+                        child: Text('저장토큰삭제'),
+                      ),
+                    ],
                   ),
                 ),
               ],
@@ -228,33 +219,25 @@ class _MyHomePageState extends State<MyHomePage> with WidgetsBindingObserver {
                     child: CircularProgressIndicator(),
                   );
                 } else if (snapshot.hasError) {
+                  print('Error starting local server: ${snapshot.error}');
                   return Center(
                     child: Text('Failed to start local server: ${snapshot.error}'),
                   );
                 } else {
-                  return Column(
-                    children: [
-                      Expanded(
-                        child: WebView(
-                          initialUrl: 'https://auth.tesla.com/oauth2/v3/authorize?response_type=code&client_id=${widget.clientId}&redirect_uri=$redirectUri&scope=$scope',
-                          javascriptMode: JavascriptMode.unrestricted,
-                          onWebViewCreated: (WebViewController webViewController) {
-                            _controller = webViewController;
-                          },
-                        ),
-                      ),
-                      Padding(
-                        padding: const EdgeInsets.all(8.0),
-                        child: ElevatedButton(
-                          onPressed: _clearAccessToken,
-                          child: Text('신규토큰발행'),
-                        ),
-                      ),
-                    ],
-                  );
+                  if (accessToken.isEmpty) {
+                    return Center(
+                      child: Text('No access token found. Please authenticate.'),
+                    );
+                  } else {
+                    return Center(
+                      child: Text('Authentication complete.'),
+                    );
+                  }
                 }
               },
-            ),
+            )
+
+
     );
   }
 }

@@ -5,21 +5,24 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "flutter_application_1",
+            "name": "Flutter",
+            "type": "dart",
             "request": "launch",
-            "type": "dart"
+            "program": "lib/main.dart",
+            "args": [
+              "--dart-define=CLIENT_ID=2110d263-ec90-42b5-9fd9-e1064d93a976",
+              "--dart-define=CLIENT_SECRET=ta-secret.GUwR%lb%N7UnHTeb"
+            ]
         },
         {
-            "name": "flutter_application_1 (profile mode)",
-            "request": "launch",
+            "name": "Flutter prod",
             "type": "dart",
-            "flutterMode": "profile"
+            "request": "launch",
+            "program": "lib/main.dart",
+            "args": [
+              "--dart-define=CLIENT_ID=2110d263-ec90-42b5-9fd9-e1064d93a976",
+              "--dart-define=CLIENT_SECRET=ta-secret.GUwR%lb%N7UnHTeb"
+            ]
         },
-        {
-            "name": "flutter_application_1 (release mode)",
-            "request": "launch",
-            "type": "dart",
-            "flutterMode": "release"
-        }
     ]
 }
